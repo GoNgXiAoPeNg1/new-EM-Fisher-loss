@@ -189,4 +189,58 @@ class MulticlassDiceLoss(nn.Module):
             totalLoss += diceLoss
 
         return totalLoss
+# MyLoss 是没有求均值，loss值很大，但是效果好，损失值降得快
+class MyLoss(nn.Module):
+    def __init__(self):
+        super(MyLoss, self).__init__()
+        self.tanh = nn.ReLU(inplace=True)
+        self.mse = nn.MSELoss()
+        self.eps = 1e-15
+    def forward(self, input, target):
+        target = target.float()
+        input = F.softmax(input, dim=1)
+        neg_target = 1 - target
 
+        pos1 = torch.pow(torch.sub(1, (torch.mul(input[:, 0], neg_target).sum() + self.eps)), 2)
+        pos2 = torch.pow(torch.sub(1, (torch.mul(input[:, 1], target).sum() + self.eps)), 2)
+        pos_loss = (pos1 + pos2) / 2
+
+        neg1 = torch.pow(torch.mul(input[:, 0], target), 2)
+        neg2 = torch.pow(torch.mul(input[:, 1], neg_target), 2)
+
+        neg_loss = (neg1.sum() + neg2.sum()) / 2
+        # if the follow  two lines are not used, the effect is better. But the loss value not in [0,1]
+        # neg_loss = F.sigmoid(torch.log(torch.log(neg_loss+1)+1)+1)
+        # pos_loss = F.sigmoid(pos_loss+1)
+
+        
+        return (pos_loss.sum() + neg_loss.sum()) / 2
+
+#MyLossright的损失值小于1，在做科研时一般都要归一化到1.但是这个效果没有上边的好。所以在做工程时用上边的MyLoss
+class MyLossright(nn.Module):
+    def __init__(self):
+        super(MyLoss, self).__init__()
+        self.tanh = nn.ReLU(inplace=True)
+        self.mse = nn.MSELoss()
+        self.eps = 1e-15
+    def forward(self, input, target):
+        target = target.float()
+        input = F.softmax(input, dim=1)
+        neg_target = 1 - target
+
+        pos1 = torch.pow(torch.sub(1, (torch.mul(input[:, 0], neg_target).sum() + self.eps) / neg_target.sum()), 2)
+        pos2 = torch.pow(torch.sub(1, (torch.mul(input[:, 1], target).sum() + self.eps) / target.sum()), 2)
+
+
+        pos_loss = (pos1 + pos2) / 2
+
+        neg1 = torch.pow(torch.mul(input[:, 0], target), 2)
+        neg2 = torch.pow(torch.mul(input[:, 1], neg_target), 2)
+
+        neg_loss = (neg1.sum() + neg2.sum()) / 2
+
+        neg_loss = F.sigmoid(torch.log(torch.log(neg_loss+1)+1)+1)
+        pos_loss = F.sigmoid(pos_loss+1)
+
+
+        return (pos_loss.mean() + neg_loss.mean()) / 2
